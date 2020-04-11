@@ -1,3 +1,3 @@
 # Rstudio
-# Portaias Utlizados
+# Portais Utilizados
 https://rstudio.github.io/leaflet/
