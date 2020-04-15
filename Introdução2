@@ -1,0 +1,249 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+#Instalar os pacotes necessarios para a aula
+
+```{r}
+install.packages("readr")         #Leitura de tabelas
+install.packages("rgdal")         #Conversao de formatos espaciais e projecoes
+install.packages("sf")            #Formato espacial sf
+install.packages("dplyr")         #Manipulacao de banco de dados (com unioes)
+install.packages("raster")        #Formato espacial raster
+install.packages("prettymapr")    #Escalas e legendas em mÃ©todo incremental
+install.packages("tmap")          #Mapas em metodo nao-incremental
+```
+
+#Carregar os pacotes na memoria
+
+```{r}
+library(readr)
+library(rgdal)
+library(sf)
+library(dplyr)
+library(raster)
+library(prettymapr)
+library(tmap)
+```
+
+#Mostrando e configurando o diretorio de trabalho
+
+```{r}
+getwd()
+setwd("D:/R_CTA/aula3")
+```
+
+#Importando a primeira tabela de dados
+
+```{r}
+library(readr)
+pocos_abc <- read_delim("pocos_abc.csv", ";", escape_double = FALSE,
+    locale = locale(decimal_mark = ",", grouping_mark = "."), trim_ws = TRUE)
+View(pocos_abc)
+```
+
+#Gravando a base de dados
+
+```{r}
+save.image("D:/R_CTA/aula3/aula3.RData")
+```
+
+#primeiro mapa
+```{r}
+plot(latitude_decimal ~longitude_decimal, data=pocos_abc)
+```
+
+#Pesquisando projecoes
+
+```{r}
+library(rgdal)
+EPSG <- make_EPSG()
+View(EPSG)
+consulta_sirgas <- EPSG[grep("SIRGAS 2000", EPSG$note, ignore.case=TRUE), 1:3]
+View(consulta_sirgas)
+subset(EPSG, code==4674) 
+sirgas2000 <- "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs" #primeira alternativa
+sirgas2000 <- as.character(EPSG[321, 3])                                   #segunda alternativa
+sirgas2000
+```
+
+#Atividade 1 - Criar uma variavel para armazenar a projecao WGS 84, que possui EPSG 4326
+
+#converter a tabela em SimpleFeatures
+```{r}
+class(pocos_abc)
+library(sf)
+##Primeira opcao, usando prj4 que armazenamos na variavel sirgas2000
+sf_pocos_abc <- st_as_sf(pocos_abc, coords = c("longitude_decimal", "latitude_decimal"), crs = sirgas2000)
+##Segunda opcao, usando o codigo da projecao
+sf_pocos_abc <- st_as_sf(pocos_abc, coords = c("longitude_decimal", "latitude_decimal"), crs = 4674)
+class(sf_pocos_abc)
+View(sf_pocos_abc)
+plot(st_geometry(sf_pocos_abc))
+```
+
+#Importando linhas em shapefile
+
+```{r}
+hidrografia_abc <- read_sf("hidrografia_abc.shp")
+st_crs(hidrografia_abc)
+```
+
+##primeira alternativa
+
+```{r}
+hidrografia_abc_sirgas2000<-st_transform(hidrografia_abc, sirgas2000)
+```
+
+##segunda alternativa
+
+```{r}
+hidrografia_abc_sirgas2000<-st_transform(hidrografia_abc, 4674)
+```
+
+
+##terceira alternativa - copiando a projecao de outro objeto
+
+```{r}
+hidrografia_abc_sirgas2000<-st_transform(hidrografia_abc, st_crs(sf_pocos_abc))
+st_crs(hidrografia_abc_sirgas2000)
+plot(st_geometry(hidrografia_abc_sirgas2000))
+```
+
+#Importando poligonos de shapefile
+
+```{r}
+setores_sp <- read_sf("35SEE250GC_SIR.shp")
+View(setores_sp)
+codigo_abc <- c(3513801,3529401,3547809, 3548708, 3548807, 3543303, 3544103)
+setores_abc <- subset(setores_sp, setores_sp$CD_GEOCODM %in% codigo_abc)
+plot(st_geometry(setores_abc))
+st_crs(setores_abc)
+st_crs(setores_abc)<-4674
+st_crs(setores_abc)
+```
+
+#Juntando shapefile a uma tabela de atributos
+
+```{r}
+censo2010 <- read.csv("censo2010.csv",sep = ";", dec = ",")
+View(censo2010)
+library(dplyr)
+setores_abc_censo <- left_join(setores_abc, censo2010, by = c(CD_GEOCODI = "Cod_setor")) #mostra mensagem de erro
+is.numeric(censo2010$Cod_setor)
+is.numeric(setores_abc$CD_GEOCODI)
+setores_abc$CD_GEOCODI <- as.numeric(setores_abc$CD_GEOCODI)
+setores_abc_censo <- left_join(setores_abc, censo2010, by = c(CD_GEOCODI = "Cod_setor"))
+View(setores_abc_censo)
+st_write(setores_abc_censo,"setores_abc_censo.shp")
+st_write(setores_abc_censo,"setores_abc.gpkg", layer = "censo")
+st_write(setores_abc_censo,"setores_abc_censo.kml")
+```
+
+#Primeiro mapa tematico
+
+```{r}
+plot(setores_abc_censo["Renda"], axes = TRUE, border = NA, cex.axis=0.5, breaks = "quantile")
+```
+
+#Atividade 2 - Criar um mapa do percentual de rede de esgoto com intervalo por quebras naturais. 
+#Submeter codigo e imagem do mapa
+
+#importando arquivos raster
+
+```{r}
+srtm_abc<-raster("srtm_abc.tif")
+class(srtm_abc)
+projection(srtm_abc)
+srtm_abc_sirgas2000<-projectRaster(srtm_abc,crs = sirgas2000)
+plot(srtm_abc_sirgas2000)
+writeRaster(srtm_abc_sirgas2000,"srtm_abc_sirgas2000.tif")
+```
+
+#visualizando dados vetoriais no metodo incremental
+
+```{r}
+dev.new(width=10, height=10) #abre uma janela maior para visualizar os mapas
+plot(srtm_abc_sirgas2000, cex.axis=0.6, main ="ABC Paulista")
+mun_abc <- read_sf("mun_abc.shp")
+View(mun_abc)
+plot(st_geometry(mun_abc),border="gray30", lwd=2, add=TRUE)
+plot(st_geometry(hidrografia_abc_sirgas2000), col=4, add=TRUE)
+plot(st_geometry(sf_pocos_abc), pch=20, col="deeppink", cex=0.4, add=TRUE)
+text(st_coordinates(st_centroid(mun_abc)),mun_abc$NM_MUNICIP, cex=0.7)
+text(locator(1), "Serra do mar", cex=0.7)
+scalebar(10, xy=click(), type="bar", divs=4, below="Km", cex=0.7)
+library(prettymapr)
+addnortharrow("bottomright", scale = 0.5)
+```
+
+#Atividade 3 - Modificar o mapa incremental com as seguintes alteracoes:
+#Dobrar o tamanho de fonte dos eixos de coordenadas
+#Limites municipais com borda de cor preta
+#Hidrografia com linha pontilhada
+#Pontos de pocos de cor amarela e formato quadrado
+#Nome dos municipios apenas em Santo Andre e Sao Bernardo do Campo, colocados interativamente com a funcao locator
+#Seta de norte no canto superior direito
+#Obs: submeter codigo e imagem
+
+#mapas tematicos - metodo nao incremental
+
+```{r}
+library(tmap)
+dev.new(width=10, height=10)
+tm_shape(setores_abc_censo) + tm_polygons()
+help("tmap-element")
+vignette("tmap-getstarted")
+dev.new(width=10, height=10)
+tm_shape(setores_abc_censo) + 
+ tm_grid(alpha = 0.2, labels.rot = c(0,90), labels.inside.frame = FALSE) +
+ tm_fill(col = "Renda", style = "quantile", palette = "YlOrBr") +
+ tm_compass(position = c("right","top")) + tm_scale_bar() + 
+ tm_credits("Projecao SIRGAS 2000 \n Fonte: Censo IBGE(2010) \n Classificacao por quantis") +
+ tm_layout(main.title = "Renda no ABC", main.title.position = "center", outer.margins = 0.05)
+```
+
+#mapas com camadas - metodo nao incremental
+
+```{r}
+dev.new(width=10, height=10)
+tm_shape(srtm_abc_sirgas2000) + tm_raster(breaks = c(0,200,400,600,800,1000,1200)) +
+ tm_legend(title = "Elevacao (m)") +
+ tm_grid(alpha = 0, labels.rot = c(0,90), labels.inside.frame = FALSE) +
+tm_shape(mun_abc) + tm_borders(col = "gray30", lwd = 2) +
+ tm_add_legend(type = "line", col = "gray30", labels = "Limites municipais") +
+tm_shape(hidrografia_abc_sirgas2000) + tm_lines(col = "blue") +
+ tm_add_legend(type = "line", col = "blue", labels = "Hidrografia") +
+tm_shape(sf_pocos_abc) + tm_symbols(shape = 20, col = "deeppink", scale = 0.2) +
+ tm_add_legend(type = "symbol", shape = 20, col = "deeppink", labels = "Pocos") +
+tm_shape(mun_abc) + tm_text("NM_MUNICIP", size = 0.5, auto.placement = T) +
+tm_compass(position = c("right","top")) + tm_scale_bar() + 
+tm_credits("Projecao SIRGAS 2000 \n Fonte: IBGE, NASA") +
+tm_layout(main.title = "ABC", main.title.position = "center", legend.outside = TRUE)
+```
+
+#mapas interativos
+
+```{r}
+tmap_mode("view")
+tm_shape(setores_abc_censo) + 
+  tm_fill(col = "Renda", style = "quantile", popup.vars = c("Pessoas", "Renda")) +
+  tm_scale_bar()
+tmap_mode("plot")
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
