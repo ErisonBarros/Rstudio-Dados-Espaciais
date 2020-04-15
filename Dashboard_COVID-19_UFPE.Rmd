@@ -1,0 +1,357 @@
+---
+title: "COVID-19 UFPE / DECART"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    social: [ "twitter", "facebook", "menu"]
+    source_code: embed
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(knitr)
+library(DT)
+library(rpivotTable)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+library(openintro)
+library(highcharter)
+library(ggvis)
+library(maps) #mapas simples, eixos, escala, cidades 
+library(mapdata) #base de dados WorldHires e rios
+library(rworldmap) #outra base de dados de mapas do mundo
+library(maptools) #Ler ESRI shapefiles 
+library(mapproj) #Projeções e grids
+library(ggmap) #Gmaps, OSM + mapas baseados em ggplot2
+library(rgdal)
+library(shinydashboard)
+```
+
+ 
+```{r}
+### Leituras dos Dados
+data <- read.csv("https://brasil.io/dataset/covid19/caso?format=csv")
+data<-data.frame(data)
+```
+
+```{r}
+### Cor das Telas
+mycolors <- c("red", "#FFC125", "darkgreen", "darkorange")
+```
+
+Dados Interativos 
+========================================
+
+CASOS DE COVID-19 EM PERNAMBUCO
+-------------------------------------
+
+### CASOS DE COVID-19 EM PERNAMBUCO
+
+```{r}
+library(shinydashboard)
+valueBox(paste("PERNAMBUCO"),
+         color = "warning")
+```
+
+### Casos em Pernambuco
+
+```{r message=FALSE}
+valueBox(sum(data$confirmed),
+         icon = "fa-user")
+```
+
+### **Casos Confirmados no Estado de Pernambuco**
+
+```{r}
+###### Soma os Casos ####
+
+soma<-sum(data$confirmed)
+
+gauge(round(sum(data$confirmed),
+            digits =10),
+            min = 0,
+            max = 100000,
+            gaugeSectors(success = c(0, 1000),
+                         warning = c(1000, 100000),
+                         danger = c(100000, 1000000),
+                         colors = c("green", "yellow", "red")))
+
+```
+
+### RECIFE
+
+```{r}
+valueBox(sum(data$city == "Recife"),
+         icon = 'fa-building')
+```
+
+### Olinda
+
+```{r}
+valueBox(sum(data$city == "Olinda"),
+         icon = 'fa-building')
+```
+
+### Jaboatão dos Guararapes
+
+```{r}
+valueBox(sum(data$city == "JaboatÃ£o dos Guararapes"),
+         icon = 'fa-building')
+```
+
+### Paulista
+
+```{r}
+valueBox(sum(data$city == "Paulista"),
+         icon = 'fa-building')
+```
+
+Número de Casos
+-------------------------------
+
+### Número de Casos
+
+```{r}
+p1 <- data %>%
+         group_by(city) %>%
+         summarise(count = n()) %>%
+         plot_ly(x = ~city,
+                 y = ~count,
+                 color = "blue",
+                 type = 'bar') %>%
+layout(xaxis = list(title = "Municipios"),
+yaxis = list(title = 'Número de Casos'))
+p1
+```
+
+### Datas que Houve Mortes
+
+```{r}
+
+# Carrega o pacote tidyr
+library(tidyr)
+
+# Reune as variaveis de ano espalhadas pela base 'homic'
+#p2<- gather(data, state, deaths)
+
+# Verifica as primeiras observacoes do novo banco
+#head(p2)
+
+# Reune variaveis espalhadas no banco homic
+#p2
+#p21 <- select(data, state, city, confirmed, deaths)
+
+#p2<- gather(data = data, key = city, value = Recife,-date, -confirmed, -deaths)
+
+# Visualiza o banco
+#head(p2)
+
+# Seleciona observacoes com populacao maior que 500 mil e menor que 1 milhao
+a <-filter(data, place_type=="state",deaths>0)# ou
+p2<-data.frame(a)
+
+```
+
+
+### Data Vs Casos confirmados
+
+```{r}
+p3 <- plot_ly(data,
+              x = ~date,
+              y = ~confirmed,
+              text = paste("data:", data$date,
+                           "Confirmado:",
+                           data$confirmed),
+              type = "bar") %>%
+         layout(xaxis = list(title="data"),
+                yaxis = list(title = "casos confirmados"))
+p3
+```
+
+Scatter Plot de Casos confirmados Vs Mortes
+------------------------------------
+### Scatter Plot de Casos confirmados Vs Mortes
+
+```{r}
+## Eliminar as Linhas conm NA's######
+data<-na.omit(data)
+
+p4 <- plot_ly(data, x=~confirmed) %>%
+         add_markers(y = ~deaths,
+                     text = ~paste("confirmed: ", confirmed),
+                     showlegend = F) %>%
+         add_lines(y = ~fitted(loess(confirmed ~ deaths)),
+                   name = "Loess Smoother",
+                   color = I("#FFC125"),
+                   showlegend = T,
+                   line = list(width=5)) %>%
+         layout(xaxis = list(title = "casos confirmados"),
+                yaxis = list(title = "mortes"))
+p4
+```
+
+### Box Plot das Cidades
+
+```{r}
+data %>%
+         group_by(city) %>%
+         ggvis(~city, ~deaths, fill = ~city) %>%
+         layer_boxplots()
+```
+
+Mapa
+========================================
+
+### Mapa
+Coordenadas das Cidades de Visualização
+
+```{r}
+cidades <- c("Recife PE","Paulista PE","Jaboatão dos Guararapes PE")
+DF <- data.frame(cidade=cidades, lat=NA, lon=NA)
+require(RgoogleMaps)
+## Loading required package: RgoogleMaps
+getGeoCode("Recife, Pernambuco, Brazil")
+getGeoCode("Paulista, Pernambuco, Brazil")
+getGeoCode("Jaboatão dos Guararapes Pernambuco, Brazil")
+
+# Para várias cidades:
+DF <- with(DF,data.frame(cidade=cidade, t(sapply(DF$cidade, getGeoCode))))
+knitr::kable(DF, format="markdown", digits=4)
+
+## Loading required package: plyr
+library(plyr)
+x<-ldply(DF$cidade, function(x) getGeoCode(x))
+knitr::kable(
+  data.frame(cidade=cidades,x),
+  format="markdown",
+  digits=4)
+```
+
+
+
+### Mapa Estático de Casos
+
+```{r}
+library(leaflet)
+library(geojson)
+nycounties <- rgdal::readOGR("bairros.geojson")
+#ies.geojson", layer: "nycounties
+pal <- colorNumeric("viridis", NULL)
+leaflet(nycounties) %>%
+  addTiles() %>%
+  addPolygons(stroke = FALSE, smoothFactor = 0.3, fillOpacity = 25,
+    fillColor = ~pal(bairro_codigo),
+    label = ~paste0(bairro_codigo, ": ", formatC(bairro_codigo, big.mark = ","))) %>%
+  addLegend(pal = pal, values = ~(bairro_codigo), opacity = 80.0,
+    labFormat = labelFormat(transform = function(x) round(10^x)))
+
+```
+
+```{r Mapa Estático}
+##
+require(ggplot2)
+## Loading required package: ggplot2
+require(ggmap)
+## Loading required package: ggmap
+#box <- make_bbox(lon, lat, data = DF)
+#map <-
+ # ggmap(
+   # get_map(location = box, maptype="toner", source="stamen")
+   # ) +
+  #geom_point(data=DF, x=DF$lon, y=DF$lat, color="red")
+#map
+```
+
+
+### Plotar Mapas na Base do Google maps
+
+```{r}
+library(leaflet)
+DF<-data.frame(DF)
+#latitude=-8.064193
+#longitude=-34.87815
+m <- leaflet()
+m <- addTiles(m)
+m <- addMarkers(m, lng=-34.87815, lat=-8.064193, popup="origem")
+m
+```
+```{r Mapa shapfile}
+
+```
+
+
+Tabela de Dados
+========================================
+
+```{r}
+datatable(data,
+          caption = "Failure Data",
+          rownames = T,
+          filter = "top",
+          options = list(pageLength = 25))
+```
+
+Tabela Dinâmica
+========================================
+
+```{r}
+rpivotTable(data,
+            aggregatorName = "Count",
+            cols= "city",
+            rows = "date",
+            rendererName = "Heatmap")
+```
+
+Resumo {data-orientation=columns} 
+========================================
+
+Column 
+-----------------------------------
+
+### Maximo de Dados Confirmadaos
+
+```{r}
+
+a<-data.frame(max(data$confirmed))
+a
+
+```
+
+### Numero de Mortes
+```{r}
+b<-data.frame(sum(data$deaths))
+b    
+```
+
+### Número médio de Mortes
+
+```{r}
+c<-data.frame(mean(data$deaths))
+c
+```
+
+Resumo
+---------------------------
+
+Resultados
+
+* Número de casos confirmados`r length(data$confirmed)` 
+
+* Número médio de casos confirmados `r mean(data$confirmed)`.
+
+* Número médio de casos de mortes `r mean(data$deaths)`.
+
+This report was generated on `r format(Sys.Date(), format = "%B %d, %Y")`.
+
+Sobre o Relatório
+========================================
+
+Criado por:  Departamento de Engenharia Cartógrafica
+
+
+
+
+
+
